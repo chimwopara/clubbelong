@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OmniView</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+          "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+        }
+      }
+    </script>
+    <style>
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .mask-fade-top {
+            mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+        }
+
+        @keyframes float-comments {
+            0% { transform: translateY(100%); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-20px); opacity: 0; }
+        }
+        .animate-float {
+            animation: float-comments 4s linear forwards;
+        }
+        @keyframes comment-entry {
+            0% { 
+                opacity: 0; 
+                transform: translateY(20px) scale(0.9); 
+                max-height: 0; 
+                margin-bottom: 0;
+            }
+            100% { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+                max-height: 100px; 
+                margin-bottom: 0.5rem; 
+            }
+        }
+        .animate-comment-entry {
+            animation: comment-entry 0.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-fast {
+            animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes glow-pulse {
+            0% { box-shadow: 0 0 5px rgba(255,255,255,0.2), 0 0 10px rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.5); }
+            50% { box-shadow: 0 0 15px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.9); }
+            100% { box-shadow: 0 0 5px rgba(255,255,255,0.2), 0 0 10px rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.5); }
+        }
+        .animate-glow-pulse {
+            animation: glow-pulse 3s infinite alternate;
+        }
+        @keyframes float-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+        .animate-float-slow {
+            animation: float-slow 4s ease-in-out infinite;
+        }
+        /* Thumbnail Stack Animation */
+        @keyframes slide-down {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-down {
+            animation: slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        /* Subscribe Animation */
+        @keyframes heart-burst {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .animate-heart-burst {
+            animation: heart-burst 0.8s ease-out forwards;
+        }
+        /* New Button Animation */
+        .btn-pill-content {
+            max-width: 0;
+            opacity: 0;
+            transition: all 0.4s ease-in-out;
+            white-space: nowrap;
+        }
+        .group:hover .btn-pill-content, .btn-active .btn-pill-content {
+            max-width: 150px;
+            opacity: 1;
+            margin-left: 0.5rem;
+        }
+        .btn-pill-wrapper {
+            transition: width 0.4s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-black text-white overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { 
+          Play, MapPin, Video, Film, MessageCircle, Heart, Share, Camera, Eye, 
+          MoreHorizontal, Navigation, Disc, SkipForward, Search, Plus, User, 
+          Settings, Grid, Bookmark, History, Gamepad2, ShoppingBag, Filter, X, 
+          ChevronDown, SlidersHorizontal, Pause, DollarSign, FastForward, Zap, RotateCcw, 
+          Flame, Crown, Trophy, Info, Maximize, LayoutGrid, Folder, Radio, Bell, RotateCw,
+          Menu, Check, Star, Clock, Globe, Lock, Send, ChevronRight, Gem
+        } from 'lucide-react';
+
+        // --- MOCK DATA ---
+        
+        const VIDEO_SOURCES = {
+          concert_main: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+          concert_drum: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+          skate_wide: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+          skate_board: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+          movie_start: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+          movie_choice_a: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+          movie_choice_b: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4"
+        };
+
+        const BASE_STREAMS = [
+          {
+            title: "Neon City Festival",
+            distance: "0.4 mi",
+            type: "Concert",
+            angles: [
+              { id: 'stage', label: 'Main Stage', src: VIDEO_SOURCES.concert_main },
+              { id: 'drum', label: 'Drum Cam', src: VIDEO_SOURCES.concert_drum },
+            ]
+          },
+          {
+            title: "Downtown Skate Open",
+            distance: "1.2 mi",
+            type: "Sports",
+            angles: [
+              { id: 'wide', label: 'Wide Angle', src: VIDEO_SOURCES.skate_wide },
+              { id: 'board', label: 'Board Cam', src: VIDEO_SOURCES.skate_board },
+            ]
+          }
+        ];
+
+        const STREAMS_DATA = Array.from({ length: 10 }, (_, i) => ({
+            ...BASE_STREAMS[i % 2],
+            id: i + 1,
+            title: `${BASE_STREAMS[i % 2].title} ${i + 1}`,
+            thumbnail: i % 2 === 0 ? "https://picsum.photos/300/500?random=1" : "https://picsum.photos/300/500?random=2"
+        }));
+
+        const BASE_PLAYS = [
+          {
+            title: "The Midnight Package",
+            genre: "Thriller",
+            type: "Watch Now",
+            author: "@choose_your_fate",
+            startNode: 'start',
+            nodes: {
+              start: { src: VIDEO_SOURCES.movie_start, prompt: "Open the door?", loopPoint: 60, choices: [{ text: "Open", nextNode: 'open' }, { text: "Ignore", nextNode: 'ignore' }] },
+              open: { src: VIDEO_SOURCES.movie_choice_a, prompt: "It's empty...", loopPoint: 60, choices: [{ text: "Investigate", nextNode: 'start' }, { text: "Run", nextNode: 'start' }] },
+              ignore: { src: VIDEO_SOURCES.movie_choice_b, prompt: "Package left...", loopPoint: 60, choices: [{ text: "Retrieve", nextNode: 'open' }, { text: "Call Police", nextNode: 'start' }] }
+            }
+          }
+        ];
+
+        const PLAYS_DATA = Array.from({ length: 10 }, (_, i) => ({
+            ...BASE_PLAYS[0],
+            id: 100 + i,
+            title: `${BASE_PLAYS[0].title} ${i + 1}`,
+            thumbnail: "https://picsum.photos/300/500?random=3"
+        }));
+        
+        const WATCH_LATER_DATA = [
+            { id: 1001, title: "Cyberpunk Walk", type: "Stream", thumbnail: "https://picsum.photos/300/500?random=1001" },
+            { id: 1002, title: "Cooking Live", type: "Stream", thumbnail: "https://picsum.photos/300/500?random=1002" },
+            { id: 1003, title: "The Hidden Door", type: "Play", thumbnail: "https://picsum.photos/300/500?random=1003" },
+        ];
+
+        const CAPTIONS = [
+          "Wait, did you hear that noise?",
+          "It's coming from the other side...",
+          "We need to move, now!",
+          "[Intense music playing]",
+          "Look at the view from up here.",
+          "This is absolutely incredible!"
+        ];
+
+        // --- HOOKS ---
+
+        const useGlobalImmersiveMode = () => {
+            const [uiState, setUiState] = useState('visible'); 
+            const activityRef = useRef(Date.now());
+
+            const resetActivity = () => {
+                activityRef.current = Date.now();
+                setUiState('visible');
+            };
+
+            useEffect(() => {
+                const handleInteraction = () => resetActivity();
+                window.addEventListener('mousemove', handleInteraction);
+                window.addEventListener('keydown', handleInteraction);
+                window.addEventListener('touchstart', handleInteraction);
+                window.addEventListener('click', handleInteraction);
+                
+                // Add scroll listener with capture to detect scrolling in any container
+                window.addEventListener('scroll', handleInteraction, true);
+
+                return () => {
+                    window.removeEventListener('mousemove', handleInteraction);
+                    window.removeEventListener('keydown', handleInteraction);
+                    window.removeEventListener('touchstart', handleInteraction);
+                    window.removeEventListener('click', handleInteraction);
+                    window.removeEventListener('scroll', handleInteraction, true);
+                };
+            }, []);
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const elapsed = Date.now() - activityRef.current;
+                    if (elapsed > 15000) setUiState(prev => prev !== 'hidden' ? 'hidden' : prev); 
+                    else if (elapsed > 5000) setUiState(prev => (prev !== 'dimmed' && prev !== 'hidden') ? 'dimmed' : prev);
+                }, 1000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const getOpacityClass = () => {
+                if (uiState === 'hidden') return 'opacity-0 duration-1000 pointer-events-none';
+                if (uiState === 'dimmed') return 'opacity-15 hover:opacity-100 duration-1000';
+                return 'opacity-100 duration-300';
+            };
+
+            return getOpacityClass();
+        };
+
+        // --- COMPONENTS ---
+
+        const VirtualJoystick = ({ onClose }) => {
+          const stickRef = useRef(null);
+          const [position, setPosition] = useState({ x: 0, y: 0 });
+          const [isDragging, setIsDragging] = useState(false);
+
+          const handleStart = () => setIsDragging(true);
+          const handleMove = (clientX, clientY) => {
+            if (!isDragging || !stickRef.current) return;
+            const rect = stickRef.current.parentElement.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            let x = clientX - centerX;
+            let y = clientY - centerY;
+            const distance = Math.sqrt(x*x + y*y);
+            const maxDist = 40;
+            if (distance > maxDist) {
+              x = (x / distance) * maxDist;
+              y = (y / distance) * maxDist;
+            }
+            setPosition({ x, y });
+          };
+          const handleEnd = () => {
+            setIsDragging(false);
+            setPosition({ x: 0, y: 0 });
+          };
+
+          useEffect(() => {
+            const onMouseMove = (e) => handleMove(e.clientX, e.clientY);
+            const onTouchMove = (e) => handleMove(e.touches[0].clientX, e.touches[0].clientY);
+            if (isDragging) {
+              window.addEventListener('mousemove', onMouseMove);
+              window.addEventListener('mouseup', handleEnd);
+              window.addEventListener('touchmove', onTouchMove);
+              window.addEventListener('touchend', handleEnd);
+            }
+            return () => {
+              window.removeEventListener('mousemove', onMouseMove);
+              window.removeEventListener('mouseup', handleEnd);
+              window.removeEventListener('touchmove', onTouchMove);
+              window.removeEventListener('touchend', handleEnd);
+            }
+          }, [isDragging]);
+
+          return (
+            <div className="absolute bottom-32 right-4 z-50 flex flex-col items-center animate-in fade-in zoom-in duration-300">
+               <div className="bg-black/60 backdrop-blur-xl p-4 rounded-3xl border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                  <div className="relative w-32 h-32 bg-white/5 rounded-full border border-white/10 flex items-center justify-center">
+                    <div ref={stickRef} className="w-12 h-12 bg-white/80 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.3)] absolute cursor-grab active:cursor-grabbing transition-transform duration-75" style={{ transform: `translate(${position.x}px, ${position.y}px)` }} onMouseDown={handleStart} onTouchStart={handleStart}/>
+                  </div>
+                  <div className="mt-4 flex justify-between items-center text-xs font-bold text-white uppercase tracking-widest">
+                    <span>Controlling</span>
+                    <button onClick={onClose} className="p-1 hover:bg-white/10 rounded"><X className="w-4 h-4 text-white"/></button>
+                  </div>
+               </div>
+            </div>
+          );
+        };
+
+        const VideoPlayer = ({ src, isMuted, isActive, onTimeUpdate, onClick, isLive, onDoubleTap, showStandardControls }) => {
+          const videoRef = useRef(null);
+          const [caption, setCaption] = useState("");
+          const [paused, setPaused] = useState(false);
+          const [catchUpMode, setCatchUpMode] = useState(false);
+          const [showControls, setShowControls] = useState(false);
+          
+          const lastTap = useRef(0);
+
+          useEffect(() => {
+            const observer = new IntersectionObserver(([entry]) => {
+                if (entry.isIntersecting && !paused) videoRef.current?.play().catch(() => {});
+                else videoRef.current?.pause();
+              }, { threshold: 0.6 });
+            if (videoRef.current) observer.observe(videoRef.current);
+            return () => observer.disconnect();
+          }, [src, paused]);
+
+          useEffect(() => {
+            if (!isActive) return;
+            let i = 0;
+            const interval = setInterval(() => { setCaption(CAPTIONS[i % CAPTIONS.length]); i++; }, 4000);
+            return () => clearInterval(interval);
+          }, [isActive]);
+
+          const handleTap = (e) => {
+            const now = Date.now();
+            const DOUBLE_TAP_DELAY = 300;
+            
+            if (showStandardControls) {
+                // Toggle controls visibility on tap for standard plays
+                setShowControls(!showControls);
+            }
+
+            if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+                if (onDoubleTap) onDoubleTap(e);
+            } else {
+                if (!showStandardControls) {
+                    handlePlayPause(e);
+                }
+            }
+            lastTap.current = now;
+          };
+
+          const handlePlayPause = (e) => {
+            if (onClick) { onClick(e); return; }
+            if (catchUpMode) {
+                setCatchUpMode(false);
+                if (videoRef.current) videoRef.current.playbackRate = 1.0;
+                return;
+            }
+            if (videoRef.current.paused) { videoRef.current.play(); setPaused(false); } 
+            else { videoRef.current.pause(); setPaused(true); }
+          };
+
+          const handleSkip = (seconds) => {
+             if (videoRef.current) {
+                 videoRef.current.currentTime += seconds;
+             }
+          };
+
+          const handleJump = (e) => {
+              e.stopPropagation();
+              if (videoRef.current) {
+                  videoRef.current.currentTime = videoRef.current.duration - 2; 
+                  videoRef.current.play();
+                  videoRef.current.playbackRate = 1.0;
+                  setPaused(false);
+                  setCatchUpMode(false);
+              }
+          };
+
+          const handleCatchUp = (e) => {
+              e.stopPropagation();
+              if (videoRef.current) {
+                  videoRef.current.play();
+                  videoRef.current.playbackRate = 1.5;
+                  setPaused(false);
+                  setCatchUpMode(true);
+                  setTimeout(() => {
+                      if (videoRef.current && !videoRef.current.paused) {
+                          videoRef.current.playbackRate = 1.0;
+                          setCatchUpMode(false);
+                      }
+                  }, 5000);
+              }
+          };
+
+          return (
+            <div className="absolute inset-0 bg-black" onClick={handleTap}>
+              <video ref={videoRef} src={src} className="w-full h-full object-cover opacity-90" loop muted={isMuted} playsInline onTimeUpdate={onTimeUpdate} />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
+              
+              {/* Captions */}
+              {caption && !paused && !catchUpMode && !showControls && (
+                <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none px-8 text-center">
+                    <span className="bg-black/60 text-white text-sm md:text-base px-3 py-1 rounded-lg backdrop-blur-sm shadow-sm transition-all duration-300">{caption}</span>
+                </div>
+              )}
+
+              {/* Standard Controls Overlay (Plays) */}
+              {showStandardControls && (showControls || paused) && (
+                  <div className="absolute inset-0 flex items-center justify-center gap-8 bg-black/40 backdrop-blur-[2px] z-40 animate-in fade-in duration-200">
+                      <button onClick={(e) => { e.stopPropagation(); handleSkip(-10); }} className="p-3 bg-white/10 rounded-full hover:bg-white/20 backdrop-blur-md">
+                          <RotateCcw className="w-6 h-6 text-white" />
+                          <span className="text-[8px] font-bold block text-center mt-0.5">-10s</span>
+                      </button>
+                      
+                      <button onClick={(e) => { e.stopPropagation(); handlePlayPause(e); }} className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
+                        {paused ? <Play className="w-8 h-8 text-white fill-white ml-1" /> : <Pause className="w-8 h-8 text-white fill-white" />}
+                      </button>
+
+                      <button onClick={(e) => { e.stopPropagation(); handleSkip(10); }} className="p-3 bg-white/10 rounded-full hover:bg-white/20 backdrop-blur-md">
+                          <RotateCw className="w-6 h-6 text-white" />
+                          <span className="text-[8px] font-bold block text-center mt-0.5">+10s</span>
+                      </button>
+                  </div>
+              )}
+
+              {/* Live Controls (Streams) */}
+              {isLive && paused && (
+                <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/40 backdrop-blur-[2px]">
+                    <div className="flex gap-6 animate-in slide-in-from-bottom-4 duration-300 items-center">
+                        
+                        {/* Catch Up */}
+                        <button onClick={handleCatchUp} className="flex flex-col items-center gap-2 group">
+                            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                                <Zap className="w-6 h-6 text-white fill-white" />
+                            </div>
+                            <span className="text-xs font-bold text-white/80 group-hover:text-white">Catch Up</span>
+                        </button>
+
+                         {/* Play (Resume) */}
+                         <button onClick={(e) => { e.stopPropagation(); handlePlayPause(e); }} className="flex flex-col items-center gap-2 group">
+                            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                                <Play className="w-6 h-6 text-white fill-white ml-1" />
+                            </div>
+                            <span className="text-xs font-bold text-white/80 group-hover:text-white">Resume</span>
+                        </button>
+
+                        {/* Jump to Live */}
+                        <button onClick={handleJump} className="flex flex-col items-center gap-2 group">
+                            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                                <FastForward className="w-6 h-6 text-white fill-white" />
+                            </div>
+                            <span className="text-xs font-bold text-white/80 group-hover:text-white">Jump to Live</span>
+                        </button>
+
+                        {/* Watch Later */}
+                         <button className="flex flex-col items-center gap-2 group">
+                            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                                <Clock className="w-6 h-6 text-white" />
+                            </div>
+                            <span className="text-xs font-bold text-white/80 group-hover:text-white">Watch Later</span>
+                        </button>
+
+                    </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        const StreamComments = ({ hidden }) => {
+            const [comments, setComments] = useState([]);
+            
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const seed = Math.floor(Math.random() * 1000);
+                    // Determine bubble type (monochrome levels)
+                    const typeRoll = Math.random();
+                    let bubbleColor = 'bg-white/5 border-white/5'; // Default Web
+                    if (typeRoll > 0.95) bubbleColor = 'bg-white text-black border-white'; // Super Highlight (Tip)
+                    else if (typeRoll > 0.8) bubbleColor = 'bg-white/20 border-white/30'; // Premium
+                    else if (typeRoll > 0.5) bubbleColor = 'bg-white/10 border-white/10'; // Standard
+                    else if (typeRoll > 0.2) bubbleColor = 'bg-black/40 border-white/5'; // Low priority
+
+                    const newComment = {
+                        id: Date.now(),
+                        user: `User${seed}`,
+                        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4`, // Using light blue bg for avatar contrast
+                        text: ["So cool!", "Where is this?", "Love the view!", "Go left!", "Wow", "Is this live?", "Amazing quality"][Math.floor(Math.random()*7)],
+                        bubbleColor
+                    };
+                    setComments(prev => [newComment, ...prev].slice(0, 10)); // Prepend and keep last 10
+                }, 2000);
+                return () => clearInterval(interval);
+            }, []);
+
+            if (hidden) return null;
+            
+            return (
+                <div className={`absolute bottom-28 left-4 w-72 h-64 overflow-hidden flex flex-col-reverse justify-start pointer-events-none transition-all pb-4 mask-fade-top`}>
+                    {comments.map(c => (
+                        <div key={c.id} className="animate-comment-entry flex items-end gap-2 origin-bottom mb-2">
+                            <img src={c.avatar} className="w-8 h-8 rounded-full border border-white/20 bg-gray-800 flex-shrink-0 mb-0.5 transition-all" alt="avatar"/>
+                            <div className={`text-sm drop-shadow-md px-4 py-2 rounded-[20px] rounded-bl-[4px] border self-start backdrop-blur-md ${c.bubbleColor}`}>
+                                <span className="font-bold text-[10px] block opacity-70 mb-0.5">{c.user}</span>
+                                <span className={`leading-snug ${c.bubbleColor.includes('text-black') ? 'text-black font-bold' : 'text-white'}`}>{c.text}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        const SidebarButton = ({ icon: Icon, label, onClick, isActive, activeClass }) => {
+            return (
+                <button 
+                    onClick={onClick}
+                    className={`relative group flex items-center bg-black/40 backdrop-blur-md rounded-full border border-white/10 hover:bg-white/10 transition-all p-2.5 ${isActive ? activeClass : 'text-white'}`}
+                >
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    <span className="btn-pill-content text-xs font-bold whitespace-nowrap overflow-hidden">
+                        {label}
+                    </span>
+                </button>
+            );
+        }
+
+        const CommentInputBar = ({ onTip, className }) => {
+            const [showTipMenu, setShowTipMenu] = useState(false);
+            
+            return (
+                <div className={`absolute bottom-6 left-4 z-50 animate-in slide-in-from-bottom-2 w-72 ${className}`}>
+                     <div className="bg-black/60 backdrop-blur-xl rounded-full border border-white/10 flex items-center p-1 pl-3 shadow-lg relative">
+                         <input 
+                            type="text" 
+                            placeholder="Say something..." 
+                            className="bg-transparent border-none outline-none text-white text-xs flex-1 placeholder:text-white/40 h-8 min-w-0"
+                         />
+                         
+                         <div className="relative flex items-center">
+                            <button 
+                                onClick={() => setShowTipMenu(!showTipMenu)}
+                                className="p-1.5 hover:bg-white/10 rounded-full transition-colors group mr-1"
+                            >
+                                <DollarSign className="w-4 h-4 text-white/70 group-hover:text-white transition-colors" />
+                            </button>
+                            
+                            {showTipMenu && (
+                                <div className="absolute bottom-12 right-0 bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-xl p-2 w-32 shadow-2xl animate-in slide-in-from-bottom-2 flex flex-col gap-2 z-[60]">
+                                    <button onClick={() => { onTip(5); setShowTipMenu(false); }} className="w-full py-2 bg-white/5 hover:bg-white text-white hover:text-black rounded-lg text-sm font-bold transition-colors border border-white/5">$5.00</button>
+                                    <button onClick={() => { onTip(10); setShowTipMenu(false); }} className="w-full py-2 bg-white/5 hover:bg-white text-white hover:text-black rounded-lg text-sm font-bold transition-colors border border-white/5">$10.00</button>
+                                    <button onClick={() => { onTip('custom'); setShowTipMenu(false); }} className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-bold text-white transition-colors border border-white/5">Custom</button>
+                                </div>
+                            )}
+                         </div>
+
+                         <button className="p-1.5 hover:bg-white/10 rounded-full transition-colors border-l border-white/10 pl-2">
+                             <Send className="w-4 h-4 text-white/80" />
+                         </button>
+                     </div>
+                </div>
+            );
+        };
+
+        const StreamView = ({ stream, isActive, opacityClass }) => {
+          const containerRef = useRef(null);
+          const [activeAngleIndex, setActiveAngleIndex] = useState(0);
+          const [controlling, setControlling] = useState(false);
+          const [hideComments, setHideComments] = useState(false);
+          const [showSubscribed, setShowSubscribed] = useState(false);
+          
+          const activeAngle = stream.angles[activeAngleIndex];
+          const isImmersive = opacityClass.includes('opacity-0');
+
+          const handleDoubleTap = () => {
+              setShowSubscribed(true);
+              setTimeout(() => setShowSubscribed(false), 1000);
+          };
+
+          const handleTip = (amount) => {
+              // In a real app, this would trigger payment flow
+              console.log(`Tipping $${amount}`);
+          };
+
+          return (
+            <div ref={containerRef} id={`stream-${stream.id}`} className="relative w-full h-[100dvh] flex-shrink-0 bg-gray-900 border-b-4 border-black">
+              <VideoPlayer src={activeAngle.src} isActive={isActive} isMuted={false} isLive={true} onDoubleTap={handleDoubleTap} />
+              
+              {showSubscribed && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                      <div className="animate-heart-burst bg-black/50 p-6 rounded-full backdrop-blur-md border border-white/10">
+                          <Bell className="w-16 h-16 text-white fill-white" />
+                          <span className="text-white font-bold text-sm mt-2 block text-center uppercase tracking-widest">Subscribed</span>
+                      </div>
+                  </div>
+              )}
+
+              <div className={`absolute top-1/2 -translate-y-1/2 left-4 max-w-[70%] z-20 pointer-events-none transition-all ${opacityClass}`}>
+                 <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-red-600 text-white px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                      <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> LIVE
+                    </div>
+                    <div className="bg-black/40 backdrop-blur-md px-2 py-0.5 rounded text-xs text-white flex items-center gap-1 border border-white/10">
+                      <MapPin className="w-3 h-3" /> {stream.distance}
+                    </div>
+                    <div className="bg-black/40 backdrop-blur-md px-2 py-0.5 rounded text-xs text-white border border-white/10">
+                      {stream.type}
+                    </div>
+                 </div>
+                 <h3 className="text-white font-bold text-3xl drop-shadow-md leading-tight">{stream.title}</h3>
+              </div>
+
+              <StreamComments hidden={hideComments} />
+              
+              {!hideComments && <CommentInputBar onTip={handleTip} className={`transition-all ${opacityClass}`} />}
+              
+              {controlling && <VirtualJoystick onClose={() => setControlling(false)} />}
+
+              <div className={`absolute right-3 bottom-24 flex flex-col items-end gap-5 z-20 transition-all ${opacityClass}`}>
+                <SidebarButton icon={MapPin} label="Visit" />
+                <SidebarButton 
+                    icon={Gamepad2} 
+                    label="Control" 
+                    onClick={() => setControlling(!controlling)} 
+                    isActive={controlling}
+                    activeClass="bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                />
+                <SidebarButton icon={ShoppingBag} label="Shop" />
+                <SidebarButton 
+                    icon={MessageCircle} 
+                    label={!hideComments ? 'Comments' : 'No Comments'} 
+                    onClick={() => setHideComments(!hideComments)}
+                />
+              </div>
+
+              <div className={`absolute top-24 right-3 z-30 transition-all ${opacityClass}`}>
+                 <div className="bg-black/40 backdrop-blur-md rounded-xl p-1.5 flex flex-col gap-2 border border-white/10">
+                    <div className="text-[8px] text-center text-white/60 font-bold uppercase">Cams</div>
+                    {stream.angles.map((angle, idx) => (
+                      <button key={angle.id} onClick={() => setActiveAngleIndex(idx)} className={`relative w-10 h-10 rounded-lg overflow-hidden border transition-all ${idx === activeAngleIndex ? 'border-white bg-white/20 scale-105 shadow-lg' : 'border-white/10 opacity-60'}`}>
+                          <div className="absolute inset-0 bg-gray-800" />
+                          <div className="absolute bottom-0 w-full text-[6px] bg-black/70 text-center text-white py-0.5 z-10">{angle.label}</div>
+                      </button>
+                    ))}
+                 </div>
+              </div>
+            </div>
+          );
+        };
+
+        const PlayView = ({ play, isActive, opacityClass }) => {
+          const containerRef = useRef(null);
+          const [currentNodeId, setCurrentNodeId] = useState(play.startNode);
+          const [showChoices, setShowChoices] = useState(false);
+          const [showSubscribed, setShowSubscribed] = useState(false);
+          const node = play.nodes[currentNodeId];
+
+          const handleTimeUpdate = (e) => {
+            // Show choices only near the end (e.g., last 5 seconds)
+            if (e.target.duration - e.target.currentTime < 5 && !showChoices) setShowChoices(true);
+          };
+          const handleChoice = (nextNodeId, e) => {
+            e.stopPropagation();
+            setShowChoices(false);
+            setCurrentNodeId(nextNodeId);
+          };
+
+          const handleDoubleTap = () => {
+              setShowSubscribed(true);
+              setTimeout(() => setShowSubscribed(false), 1000);
+          };
+
+          return (
+            <div ref={containerRef} id={`play-${play.id}`} className="relative w-full h-[100dvh] flex-shrink-0 bg-gray-900 border-b-4 border-black">
+              {/* Added showStandardControls prop to enable -10/+10 controls */}
+              <VideoPlayer 
+                src={node.src} 
+                isActive={isActive} 
+                isMuted={false} 
+                onTimeUpdate={handleTimeUpdate} 
+                isLive={false} 
+                onDoubleTap={handleDoubleTap} 
+                showStandardControls={!showChoices}
+              />
+              
+              {showSubscribed && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                      <div className="animate-heart-burst bg-black/50 p-6 rounded-full backdrop-blur-md border border-white/10">
+                          <Bell className="w-16 h-16 text-white fill-white" />
+                          <span className="text-white font-bold text-sm mt-2 block text-center uppercase tracking-widest">Subscribed</span>
+                      </div>
+                  </div>
+              )}
+
+              {showChoices && (
+                <div className={`absolute inset-0 z-40 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col items-end justify-end p-6 pb-32 animate-in fade-in duration-300 pointer-events-none transition-all ${opacityClass}`}>
+                  <div className="flex flex-col gap-3 w-full max-w-sm items-end pointer-events-auto">
+                      <h2 className="text-xl font-bold text-white text-right mb-2 drop-shadow-xl font-serif bg-black/60 p-3 rounded-xl border border-white/10 backdrop-blur-sm">{node.prompt}</h2>
+                      {node.choices.map((choice, idx) => (
+                        <button key={idx} onClick={(e) => handleChoice(choice.nextNode, e)} className="relative overflow-hidden bg-white text-black font-bold py-3 px-6 rounded-xl shadow-[0_0_15px_rgba(255,255,255,0.1)] transition active:scale-95 hover:bg-gray-200 w-full text-right border border-white/20">
+                          <span className="relative z-10 flex items-center justify-end gap-2 text-sm uppercase tracking-wide">{choice.text} <SkipForward className="w-4 h-4" /></span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+              <div className={`absolute top-1/2 -translate-y-1/2 left-4 max-w-[60%] z-20 pointer-events-none transition-all ${opacityClass}`}>
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded w-fit mb-2 uppercase tracking-wider shadow-lg">Interactive</div>
+                  <h3 className="text-white font-bold text-3xl drop-shadow-md leading-tight mb-1">{play.title}</h3>
+                  <div className="flex items-center gap-3 text-xs text-white/80">
+                      <span className="flex items-center gap-1"><Film className="w-3 h-3"/> {play.genre}</span>
+                      <span className="opacity-50">|</span>
+                      <span>{play.type}</span>
+                  </div>
+              </div>
+            </div>
+          );
+        };
+
+        const MeView = ({ minutesWatched, isFreePremiumUnlocked }) => {
+          const [activeTab, setActiveTab] = useState('posts'); 
+          const [showPremiumPopup, setShowPremiumPopup] = useState(false);
+          const [showSettings, setShowSettings] = useState(false);
+          const [countdownPercent, setCountdownPercent] = useState(100);
+
+          const dailyGoal = 360; 
+          // If NOT premium, standard progress. If premium, countdown bar.
+          const progressPercent = Math.min((minutesWatched / dailyGoal) * 100, 100);
+
+          useEffect(() => {
+              if (isFreePremiumUnlocked) {
+                  const updateCountdown = () => {
+                      const now = new Date();
+                      const midnight = new Date();
+                      midnight.setHours(24, 0, 0, 0);
+                      const totalSecondsInDay = 24 * 60 * 60;
+                      const secondsLeft = (midnight - now) / 1000;
+                      const percentLeft = (secondsLeft / totalSecondsInDay) * 100;
+                      setCountdownPercent(percentLeft);
+                  };
+                  updateCountdown();
+                  const interval = setInterval(updateCountdown, 1000 * 60); // Update every minute
+                  return () => clearInterval(interval);
+              }
+          }, [isFreePremiumUnlocked]);
+
+          const tabs = [
+            { id: 'posts', label: 'Posts', icon: Grid },
+            { id: 'visited', label: 'Visited', icon: History },
+            { id: 'subs', label: 'Subs', icon: Bookmark },
+          ];
+
+          return (
+            <div className="w-full h-full bg-transparent text-white overflow-hidden flex flex-col relative">
+              
+              {/* Profile Header (Fixed Cutout Issue by adjusting padding/margins) */}
+              <div className="absolute top-6 right-6 z-30">
+                <button 
+                    onClick={() => setShowSettings(!showSettings)} 
+                    className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                >
+                    <Menu className="w-6 h-6 text-white" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pb-10 pt-16">
+                <div className="flex flex-col items-center px-6 mb-4 pt-8">
+                   {/* Avatar with increased margin to prevent top clipping */}
+                   <div className={`w-28 h-28 rounded-full p-1 mb-3 relative flex-shrink-0 mx-auto ${isFreePremiumUnlocked ? 'animate-glow-pulse border-2 border-white/50' : 'bg-gray-800'}`}>
+                      <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=transparent" className="w-full h-full rounded-full bg-black object-cover border border-white/10" />
+                      {isFreePremiumUnlocked && (<div className="absolute -bottom-2 -right-2 bg-white text-black p-1.5 rounded-full shadow-lg border-2 border-black z-10"><Gem className="w-5 h-5 fill-black text-black" /></div>)}
+                   </div>
+                   
+                   <h2 className="text-xl font-bold mb-1 flex items-center gap-2">@Felix_Travels {isFreePremiumUnlocked && <Gem className="w-4 h-4 text-white fill-white animate-pulse" />}</h2>
+                   <p className="text-white/60 text-sm text-center mb-6">Explorer of virtual realms. Always looking for the next hidden gem.</p>
+                   
+                   {/* Progress/Countdown Bar - MONOCHROME */}
+                   <div onClick={() => setShowPremiumPopup(true)} className="w-full max-w-sm mb-8 relative cursor-pointer group animate-float-slow perspective-1000 z-10">
+                      <div className="relative overflow-hidden h-12 bg-white/5 backdrop-blur-md rounded-full border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex items-center px-1.5 transition-transform duration-300 group-hover:scale-[1.02]">
+                          <div className="w-full h-9 bg-black/50 rounded-full overflow-hidden relative shadow-inner">
+                                <div 
+                                    className={`h-full transition-all duration-1000 ease-out relative bg-white`} 
+                                    style={{ width: `${isFreePremiumUnlocked ? countdownPercent : progressPercent}%` }}
+                                >
+                                  <div className="absolute inset-0 bg-gradient-to-b from-white/50 to-transparent" />
+                                  <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]" />
+                              </div>
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                               {isFreePremiumUnlocked ? (
+                                   <div className="flex items-center gap-2 text-black mix-blend-difference font-bold text-xs uppercase tracking-widest drop-shadow-md">
+                                        <Clock className="w-3 h-3" />
+                                        <span>Expires 12:00 AM</span>
+                                   </div>
+                               ) : (
+                                   <div className="w-full flex justify-between px-4 text-[10px] font-bold text-white mix-blend-difference uppercase tracking-[0.2em]"><span>Premium</span><span>{Math.floor(progressPercent)}%</span></div>
+                               )}
+                          </div>
+                      </div>
+                   </div>
+
+                </div>
+
+                {/* Sticky Tabs */}
+                <div className="flex border-b border-white/10 mb-1 sticky top-0 z-30 bg-black/20 backdrop-blur-md">
+                   {tabs.map(tab => {
+                     const Icon = tab.icon;
+                     return (
+                       <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center justify-center py-3 relative ${activeTab === tab.id ? 'text-white' : 'text-white/40'}`}>
+                          <Icon className="w-5 h-5 mb-1" />{activeTab === tab.id && <div className="absolute bottom-0 w-12 h-0.5 bg-white rounded-full shadow-[0_0_10px_white]"/>}
+                       </button>
+                     );
+                   })}
+                </div>
+
+                {/* Grid Content */}
+                <div className="grid grid-cols-3 gap-0.5 relative">
+                   {activeTab === 'posts' && (
+                      <>
+                      <div className="aspect-[3/4] bg-gray-900 relative group overflow-hidden cursor-pointer">
+                          <img src="https://picsum.photos/200/300?random=draft" className="w-full h-full object-cover opacity-50 blur-sm group-hover:scale-105 transition-transform" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <div className="bg-white/20 p-2 rounded-full backdrop-blur-md mb-2">
+                                  <Film className="w-5 h-5 text-white" />
+                              </div>
+                              <span className="text-xs font-bold text-white shadow-black drop-shadow-md">Drafts (2)</span>
+                          </div>
+                      </div>
+                      <div className="aspect-[3/4] bg-gray-900 relative group overflow-hidden cursor-pointer flex flex-col items-center justify-center hover:bg-white/5 transition-colors">
+                          <Radio className="w-8 h-8 text-white/50 group-hover:text-white transition-colors" />
+                          <span className="text-[10px] text-white/50 mt-2 font-bold uppercase tracking-wider group-hover:text-white text-center px-2">Your Streams</span>
+                      </div>
+                      <div className="aspect-[3/4] bg-gray-900/50 border-2 border-dashed border-white/20 relative group overflow-hidden cursor-pointer flex flex-col items-center justify-center hover:bg-white/5 transition-colors">
+                          <Camera className="w-8 h-8 text-white/50 group-hover:text-white transition-colors" />
+                          <span className="text-[10px] text-white/50 mt-2 font-bold uppercase tracking-wider group-hover:text-white">Capture</span>
+                      </div>
+                      </>
+                   )}
+                   
+                   {/* Visited Tab (Watch Later + History) */}
+                   {activeTab === 'visited' && (
+                       <div className="col-span-3">
+                           {/* Watch Later Section */}
+                           <div className="p-4 pb-2">
+                               <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                   <Clock className="w-4 h-4 text-white" /> Watch Later
+                               </h3>
+                               <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                                   {WATCH_LATER_DATA.map(item => (
+                                       <div key={item.id} className="w-32 flex-shrink-0 group relative rounded-lg overflow-hidden aspect-[2/3] border border-white/10">
+                                            <img src={item.thumbnail} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                            <div className="absolute bottom-0 w-full bg-gradient-to-t from-black to-transparent p-2">
+                                                <div className="text-[10px] font-bold text-white truncate">{item.title}</div>
+                                                <div className="text-[8px] text-white/50">{item.type}</div>
+                                            </div>
+                                       </div>
+                                   ))}
+                                   <div className="w-32 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                                       <div className="text-xs text-white/30 font-bold uppercase">View All</div>
+                                   </div>
+                               </div>
+                           </div>
+
+                           <div className="h-px bg-white/10 w-full mb-4"></div>
+
+                           {/* History Grid */}
+                           <div className="px-4 pb-2"><h3 className="text-sm font-bold text-white/50 uppercase tracking-widest">History</h3></div>
+                           <div className="grid grid-cols-3 gap-0.5">
+                                {[1,2,3,4,5,6,7,8,9].map((item) => (
+                                     <div key={item} className="aspect-[3/4] bg-gray-900 relative group overflow-hidden cursor-pointer">
+                                        <div className="absolute inset-0 flex items-center justify-center text-white/20 group-hover:bg-white/5 transition-colors">
+                                            <MapPin className="w-6 h-6" />
+                                        </div>
+                                        <img src={`https://picsum.photos/200/300?random=${item + 100}`} className="w-full h-full object-cover opacity-60 hover:opacity-80 transition-opacity" />
+                                        <div className="absolute bottom-1 left-1 bg-black/50 backdrop-blur px-1.5 rounded text-[10px]">Live</div>
+                                     </div>
+                                ))}
+                           </div>
+                       </div>
+                   )}
+
+                   {/* Subscribed Tab (With Show Name Overlay) */}
+                   {activeTab === 'subs' && [1,2,3,4,5,6].map((item) => (
+                     <div key={item} className="aspect-[3/4] bg-gray-900 relative group overflow-hidden cursor-pointer">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10" />
+                        
+                        {/* Show Name Overlay - Center Left */}
+                        <div className="absolute top-1/2 -translate-y-1/2 left-2 z-20">
+                             <h4 className="text-white font-bold text-xs leading-tight drop-shadow-md">Show Name {item}</h4>
+                             <p className="text-[8px] text-white/60">@Creator_{item}</p>
+                        </div>
+
+                        <img src={`https://picsum.photos/200/300?random=${item + 200}`} className="w-full h-full object-cover opacity-60 hover:opacity-80 transition-opacity" />
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+              {/* Settings Overlay */}
+              {showSettings && (
+                 <>
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 z-40 bg-black/20" onClick={() => setShowSettings(false)}></div>
+                    
+                    {/* Settings Content */}
+                    <div className="absolute inset-x-0 bottom-0 top-20 bg-gray-900/90 backdrop-blur-xl z-50 animate-in slide-in-from-bottom duration-300 p-6 rounded-t-3xl border-t border-white/10 shadow-2xl">
+                        <div className="flex justify-center mb-6">
+                            <div className="w-12 h-1.5 bg-white/20 rounded-full"></div>
+                        </div>
+                        <h2 className="text-xl font-bold mb-6 text-center">Settings</h2>
+                        <div className="space-y-4">
+                            <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                                <h3 className="text-sm font-bold text-white/70 uppercase mb-3">Account</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center text-sm"><span>Notifications</span><div className="w-10 h-6 bg-white/20 border border-white/30 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div></div></div>
+                                    <div className="flex justify-between items-center text-sm"><span>Privacy</span><ChevronDown className="w-4 h-4 text-white/50"/></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                 </>
+              )}
+
+              {/* Premium Popup - MOVED to top-80 (Below Bar) */}
+              {showPremiumPopup && (
+                  <>
+                      {/* Backdrop */}
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-[60] animate-in fade-in duration-200" onClick={() => setShowPremiumPopup(false)} />
+                      
+                      {/* Popup Card */}
+                      <div className="absolute top-80 left-4 right-4 bg-gray-900/80 backdrop-blur-xl p-5 rounded-2xl border border-white/20 text-center animate-in fade-in slide-in-from-top-4 z-[70] shadow-[0_0_50px_rgba(255,255,255,0.1)]">
+                          <button onClick={() => setShowPremiumPopup(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X className="w-4 h-4"/></button>
+                           
+                           {isFreePremiumUnlocked ? (
+                               // PREMIUM ACTIVE VIEW
+                               <div className="mb-2">
+                                   <div className="inline-flex items-center gap-2 bg-white/10 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-white/20 mb-4 shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                                       <Gem className="w-3 h-3 fill-white" /> Ethereal Status
+                                   </div>
+                                   
+                                   <h4 className="text-white font-bold text-lg mb-2">You are Ascended.</h4>
+                                   <p className="text-xs text-white/60 mb-6 px-4">Your dedication has unlocked the void. Enjoy your powers until the clock strikes midnight.</p>
+                                   
+                                   <div className="grid grid-cols-2 gap-3 mb-6 text-left">
+                                       <div className="bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                                           <RotateCcw className="w-5 h-5 text-white mb-2" />
+                                           <div className="text-xs font-bold text-white">Undo Decisions</div>
+                                       </div>
+                                       <div className="bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                                           <Globe className="w-5 h-5 text-white mb-2" />
+                                           <div className="text-xs font-bold text-white">Global Observer Mode</div>
+                                           <div className="text-[9px] text-white/40">Observe events outside your city (No Comments)</div>
+                                       </div>
+                                       <div className="bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                                            <Zap className="w-5 h-5 text-white mb-2" />
+                                           <div className="text-xs font-bold text-white">Advanced Controls</div>
+                                           <div className="text-[9px] text-white/40">Pause, Catch Up, Jump to Live, Watch Later</div>
+                                       </div>
+                                       <div className="bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
+                                            <MapPin className="w-5 h-5 text-white mb-2" />
+                                           <div className="text-xs font-bold text-white">Visit Events</div>
+                                       </div>
+                                   </div>
+
+                                   <h4 className="text-white font-bold text-sm mb-3">Keep the Flame Alive?</h4>
+                                   <div className="space-y-2">
+                                       <button className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/20 transition-colors relative overflow-hidden group">
+                                          <div className="text-left">
+                                              <div className="text-xs font-bold text-white group-hover:text-white transition-colors">Month Pass</div>
+                                              <div className="text-[10px] text-white/50">Permanent Badge • No Daily Grind</div>
+                                          </div>
+                                          <div className="font-bold text-white">$20</div>
+                                      </button>
+                                      <button className="w-full flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/20 transition-colors group">
+                                          <div className="text-left">
+                                              <div className="text-xs font-bold text-white group-hover:text-white transition-colors">Influencer Pass</div>
+                                              <div className="text-[10px] text-white/50">Monetize • Analytics • Verified</div>
+                                              <div className="text-[10px] text-white/60 font-bold mt-0.5">30% Ad Revenue after events</div>
+                                          </div>
+                                          <div className="font-bold text-white">$200</div>
+                                      </button>
+                                   </div>
+                               </div>
+                           ) : (
+                               // PROGRESS VIEW
+                               <>
+                                   <div className="mb-4">
+                                       <h4 className="text-white font-bold text-sm mb-1 uppercase tracking-widest shadow-[0_0_10px_rgba(255,255,255,0.2)] inline-block">Daily Ascension</h4>
+                                       <p className="text-xs text-white/70 mb-2">Consume content for <span className="text-white font-bold">6 hours</span> to unlock Premium status.</p>
+                                       <div className="text-[10px] text-white/40 font-mono">Current: {Math.floor(minutesWatched/60)}h {minutesWatched%60}m / 6h</div>
+                                   </div>
+                                   
+                                   <div className="h-px bg-white/10 w-full mb-4"></div>
+                                   
+                                   <h4 className="text-white font-bold text-sm mb-3">Skip the Grind</h4>
+                                   <div className="grid grid-cols-1 gap-2">
+                                      <button className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/10 transition-colors">
+                                          <div className="text-left">
+                                              <div className="text-xs font-bold text-white">Day Pass</div>
+                                              <div className="text-[10px] text-white/50">24 Hour Access</div>
+                                          </div>
+                                          <div className="font-bold text-white">$1</div>
+                                      </button>
+                                      <button className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/20 transition-colors relative overflow-hidden">
+                                          <div className="absolute top-0 right-0 bg-white text-black text-[8px] font-bold px-1.5 py-0.5 rounded-bl">POPULAR</div>
+                                          <div className="text-left">
+                                              <div className="text-xs font-bold text-white">Month Pass</div>
+                                              <div className="text-[10px] text-white/50">Billed Monthly</div>
+                                          </div>
+                                          <div className="font-bold text-white">$20</div>
+                                      </button>
+                                      <button className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/20 transition-colors">
+                                          <div className="text-left">
+                                              <div className="text-xs font-bold text-white">Influencer Pass</div>
+                                              <div className="text-[10px] text-white/50">Monetize • Analytics • Verified</div>
+                                              <div className="text-[10px] text-white/60 font-bold mt-0.5">30% Ad Revenue after events</div>
+                                          </div>
+                                          <div className="font-bold text-white">$200</div>
+                                      </button>
+                                   </div>
+                               </>
+                           )}
+                      </div>
+                  </>
+              )}
+            </div>
+          );
+        };
+
+        const SearchView = ({ activeTab, onClose, onApply, isPremium, cityName }) => {
+            const genres = ["All", "Action", "Thriller", "Comedy", "Sci-Fi", "Drama"];
+            const streamTypes = ["All", "Concerts", "Sports", "IRL", "Gaming", "News"];
+            const [selectedGenre, setSelectedGenre] = useState("All");
+            const [selectedType, setSelectedType] = useState(activeTab === 'plays' ? 'Trailers' : 'All');
+            const [locationScope, setLocationScope] = useState('Local');
+            const [searchText, setSearchText] = useState("");
+
+            return (
+                <div className="w-full h-full bg-transparent text-white flex flex-col relative overflow-hidden">
+                    {/* Header */}
+                    <div className="pt-8 px-6 pb-4 flex justify-between items-center bg-transparent z-20">
+                         <h2 className="text-xl font-bold font-serif">Search & Filter</h2>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto px-6 pb-24">
+                        
+                        {/* Search Input */}
+                        <div className="relative mb-8 group">
+                            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                <Search className="w-5 h-5 text-white/50 group-focus-within:text-white transition-colors" />
+                            </div>
+                            <input 
+                                type="text" 
+                                value={searchText}
+                                onChange={(e) => setSearchText(e.target.value)}
+                                placeholder="Search events, creators, places..." 
+                                className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-white/50 focus:bg-white/10 transition-all"
+                            />
+                        </div>
+
+                        {/* Location Section */}
+                        <div className="mb-8">
+                            <div className="text-xs text-white/40 font-bold mb-3 uppercase tracking-widest">Location</div>
+                            <div className="flex gap-2">
+                                 <button 
+                                    onClick={() => setLocationScope('Local')}
+                                    className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${locationScope === 'Local' ? 'bg-white/20 backdrop-blur-md text-white border-white shadow-lg' : 'bg-white/5 backdrop-blur-sm text-white/70 border-white/10 hover:bg-white/10'}`}
+                                 >
+                                    <MapPin className="w-4 h-4" /> {cityName}
+                                 </button>
+                                 <button 
+                                    onClick={() => isPremium && setLocationScope('Global')}
+                                    className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${locationScope === 'Global' ? 'bg-white/20 backdrop-blur-md text-white border-white shadow-lg' : 'bg-white/5 backdrop-blur-sm text-white/40 border-white/10'} ${!isPremium ? 'opacity-50 cursor-not-allowed' : 'hover:border-white/50'}`}
+                                 >
+                                    <Globe className="w-4 h-4" /> Global {!isPremium && <Lock className="w-3 h-3 ml-1" />}
+                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Type Toggle */}
+                        <div className="mb-8">
+                             <div className="text-xs text-white/40 font-bold mb-3 uppercase tracking-widest">Event Type</div>
+                             <div className="bg-white/5 backdrop-blur-sm p-1 rounded-xl flex">
+                                {activeTab === 'plays' ? (
+                                    <>
+                                        <button onClick={() => setSelectedType('Trailers')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedType === 'Trailers' ? 'bg-white/20 backdrop-blur-md text-white shadow-lg' : 'text-white/60 hover:text-white'}`}>Trailers</button>
+                                        <button onClick={() => setSelectedType('Watch Now')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedType === 'Watch Now' ? 'bg-white/20 backdrop-blur-md text-white shadow-lg' : 'text-white/60 hover:text-white'}`}>Watch Now</button>
+                                    </>
+                                ) : (
+                                    <div className="text-xs text-white/50 w-full text-center py-2 italic">Standard Events</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Categories/Genres */}
+                        <div className="mb-8">
+                            <div className="text-xs text-white/40 font-bold mb-3 uppercase tracking-widest">{activeTab === 'plays' ? 'Genre' : 'Category'}</div>
+                            <div className="flex flex-wrap gap-2">
+                                {(activeTab === 'plays' ? genres : streamTypes).map(g => (
+                                    <button key={g} onClick={() => setSelectedGenre(g)} className={`px-4 py-2 rounded-full text-xs font-bold border transition-all ${selectedGenre === g ? 'bg-white/20 backdrop-blur-md text-white border-white shadow-lg' : 'bg-white/5 backdrop-blur-sm text-white/60 border-white/20 hover:border-white/50 hover:text-white'}`}>{g}</button>
+                                ))}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/50 to-transparent z-30">
+                        <button onClick={() => { onApply({ searchText, selectedGenre, selectedType, locationScope }); onClose(); }} className="w-full bg-white/10 backdrop-blur-md border border-white/20 text-white font-bold py-4 rounded-xl text-sm transition-transform active:scale-95 shadow-lg flex items-center justify-center gap-2 hover:bg-white/20">
+                            <Search className="w-4 h-4" /> Show Results
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const OmniView = () => {
+          const [activeTab, setActiveTab] = useState('streams');
+          const [showSearchPanel, setShowSearchPanel] = useState(false);
+          const [showMeProfile, setShowMeProfile] = useState(false);
+          const [cityName, setCityName] = useState('Edmonton');
+          const [isHistoryView, setIsHistoryView] = useState(false);
+          
+          // Premium Logic Moved to OmniView
+          const [minutesWatched, setMinutesWatched] = useState(325); 
+          const dailyGoal = 360; 
+          const isFreePremiumUnlocked = minutesWatched >= dailyGoal;
+
+          useEffect(() => {
+              const timer = setInterval(() => { setMinutesWatched(prev => Math.min(prev + 1, 370)); }, 5000); 
+              return () => clearInterval(timer);
+          }, []);
+
+          const globalOpacityClass = useGlobalImmersiveMode();
+          
+          const touchStartY = useRef(0);
+          const touchStartX = useRef(0); 
+          const scrollContainerRef = useRef(null);
+          const historyContainerRef = useRef(null);
+          const scrollTimeoutRef = useRef(null);
+
+          useEffect(() => {
+              fetch('https://ipapi.co/json/')
+                .then(res => res.json())
+                .then(data => { if (data && data.city) setCityName(data.city); })
+                .catch(err => console.log('City fetch failed, using default'));
+          }, []);
+
+          // Auto Align Logic - Snap to nearest post after 3 seconds of inactivity
+          const snapToCenter = () => {
+              if (!scrollContainerRef.current) return;
+              
+              const viewportCenter = window.innerHeight / 2;
+              let closestElement = null;
+              let closestDistance = Infinity;
+
+              // Find all video posts
+              const posts = scrollContainerRef.current.querySelectorAll('[id^="stream-"], [id^="play-"]');
+              
+              posts.forEach(post => {
+                  const rect = post.getBoundingClientRect();
+                  const postCenter = rect.top + rect.height / 2;
+                  const distance = Math.abs(postCenter - viewportCenter);
+                  
+                  if (distance < closestDistance) {
+                      closestDistance = distance;
+                      closestElement = post;
+                  }
+              });
+
+              if (closestElement) {
+                  closestElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+          };
+
+          const handleScroll = (e) => {
+              // Clear existing timeout
+              if (scrollTimeoutRef.current) {
+                  clearTimeout(scrollTimeoutRef.current);
+              }
+              
+              // Auto-align after 3 seconds of no scrolling (only when not in history view)
+              if (!isHistoryView && activeTab !== 'me') {
+                  scrollTimeoutRef.current = setTimeout(() => {
+                      snapToCenter();
+                  }, 3000); // 3 seconds delay
+              }
+          };
+
+          const handleFeedTouchStart = (e) => {
+              touchStartY.current = e.touches[0].clientY;
+              touchStartX.current = e.touches[0].clientX;
+          };
+
+          const handleFeedTouchMove = (e) => {
+              if (isHistoryView) return;
+              const currentY = e.touches[0].clientY;
+              const currentX = e.touches[0].clientX;
+              const diffY = currentY - touchStartY.current;
+              const diffX = currentX - touchStartX.current;
+              
+              // Vertical Drag (History View Trigger) - Pull Down at Top
+              if (Math.abs(diffY) > Math.abs(diffX) && scrollContainerRef.current && scrollContainerRef.current.scrollTop <= 0 && diffY > 100) {
+                  setIsHistoryView(true);
+                  touchStartY.current = currentY; 
+              }
+
+              // Horizontal Swipe (Tab Switching)
+              if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 80) {
+                  if (diffX < 0 && activeTab === 'streams') {
+                      setActiveTab('plays');
+                      touchStartX.current = currentX;
+                  } else if (diffX > 0 && activeTab === 'plays') {
+                      setActiveTab('streams');
+                      touchStartX.current = currentX;
+                  }
+              }
+          };
+
+          const handleHistoryTouchStart = (e) => {
+              touchStartY.current = e.touches[0].clientY;
+          };
+
+          const handleHistoryTouchMove = (e) => {
+              if (!isHistoryView || !historyContainerRef.current) return;
+              const currentY = e.touches[0].clientY;
+              const diff = currentY - touchStartY.current;
+              
+              // Dismiss logic: Scroll down (pull up) when at bottom of history list
+              const { scrollTop, scrollHeight, clientHeight } = historyContainerRef.current;
+              const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 5; 
+
+              if (isAtBottom && diff < -80) { 
+                  setIsHistoryView(false);
+                  touchStartY.current = currentY;
+              }
+          };
+
+          const handleCardTap = (id, type) => {
+              setIsHistoryView(false);
+              setTimeout(() => {
+                  const element = document.getElementById(`${type}-${id}`);
+                  if (element) element.scrollIntoView({ behavior: 'smooth' });
+              }, 50);
+          };
+
+          const renderHistoryGrid = (data, type) => (
+              <div 
+                ref={historyContainerRef}
+                className="fixed inset-0 top-20 bg-black/95 z-40 p-6 animate-slide-down overflow-y-auto pb-24"
+                onTouchStart={handleHistoryTouchStart}
+                onTouchMove={handleHistoryTouchMove}
+              >
+                  <div className="max-w-md mx-auto flex flex-col gap-3">
+                      {data.map(item => (
+                          <div 
+                            key={item.id} 
+                            onClick={() => handleCardTap(item.id, type)}
+                            className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl overflow-hidden relative flex flex-row h-24 border border-white/5 active:scale-[0.98] transition-all shadow-lg hover:border-white/20"
+                          >
+                              <div className="w-20 h-full relative overflow-hidden flex-shrink-0">
+                                  <img src={item.thumbnail || `https://picsum.photos/300/500?random=${item.id}`} className="w-full h-full object-cover transition-all" />
+                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent to-gray-900/50" />
+                              </div>
+                              <div className="flex-1 p-3 flex flex-col justify-center">
+                                  <h4 className="text-sm font-bold leading-tight mb-1 text-white line-clamp-2">{item.title}</h4>
+                                  <div className="flex items-center gap-2 text-[10px] text-white/50">
+                                      <span className="bg-white/10 px-2 py-0.5 rounded-full">{type === 'stream' ? 'Live' : 'Interactive'}</span>
+                                      <span>• 2h ago</span>
+                                  </div>
+                              </div>
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-30">
+                                  <Play className="w-5 h-5 text-white fill-white" />
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+                  <div className="text-center text-white/20 text-[10px] mt-8 mb-8 animate-pulse font-mono uppercase tracking-widest">
+                      Scroll to bottom & pull up to return
+                  </div>
+              </div>
+          );
+
+          return (
+            <div className="h-screen w-full bg-black text-white font-sans flex flex-col relative overflow-hidden">
+              
+              {/* Me Profile Side Drawer (Floating) */}
+              {showMeProfile && (
+                <>
+                    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowMeProfile(false)} />
+                    <div className="fixed top-4 right-4 bottom-4 w-[85%] max-w-sm bg-black/60 backdrop-blur-2xl z-[70] shadow-2xl rounded-3xl overflow-hidden animate-in slide-in-from-right duration-300 border-l border-white/10">
+                        <MeView minutesWatched={minutesWatched} isFreePremiumUnlocked={isFreePremiumUnlocked} />
+                    </div>
+                </>
+              )}
+
+              {/* Search & Filter Side Drawer (Floating Right) */}
+              {showSearchPanel && (
+                <>
+                    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowSearchPanel(false)} />
+                    <div className="fixed top-4 right-4 bottom-4 w-[85%] max-w-sm bg-black/60 backdrop-blur-2xl z-[70] shadow-2xl rounded-3xl overflow-hidden animate-in slide-in-from-right duration-300 border-l border-white/10">
+                        <SearchView 
+                            activeTab={activeTab} 
+                            onClose={() => setShowSearchPanel(false)} 
+                            onApply={(filters) => console.log('Filters Applied:', filters)}
+                            isPremium={isFreePremiumUnlocked}
+                            cityName={cityName}
+                        />
+                    </div>
+                </>
+              )}
+
+              {activeTab !== 'me' && (
+                <div className={`fixed top-0 left-0 right-0 z-50 flex justify-end md:justify-between items-start pt-4 px-4 pb-8 bg-gradient-to-b from-black/90 to-transparent pointer-events-none transition-all ${globalOpacityClass}`}>
+                  
+                  {/* Top Left: Branding */}
+                  <h1 className="text-xl font-bold font-serif text-white drop-shadow-md pointer-events-auto hidden md:block">Club Belong</h1>
+
+                  {/* Top Center: Tabs */}
+                  <div className="absolute left-1/2 -translate-x-1/2 top-4 flex items-center gap-6 pointer-events-auto">
+                    <button onClick={() => { setActiveTab('streams'); setIsHistoryView(false); }} className={`transition-all duration-300 text-lg font-bold drop-shadow-md flex flex-col items-center ${activeTab === 'streams' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'}`}>
+                      {cityName}
+                      {activeTab === 'streams' && <div className="w-1 h-1 bg-white rounded-full mt-1 animate-in zoom-in shadow-[0_0_10px_white]" />}
+                    </button>
+                    <div className="w-[1px] h-4 bg-white/20" />
+                    <button onClick={() => { setActiveTab('plays'); setIsHistoryView(false); }} className={`transition-all duration-300 text-lg font-bold drop-shadow-md flex flex-col items-center ${activeTab === 'plays' ? 'text-white scale-110' : 'text-white/50 hover:text-white/80'}`}>
+                      Plays
+                      {activeTab === 'plays' && <div className="w-1 h-1 bg-white rounded-full mt-1 animate-in zoom-in shadow-[0_0_10px_white]" />}
+                    </button>
+                  </div>
+                  
+                  {/* Top Right: Actions & Nav */}
+                  <div className="pointer-events-auto flex items-center gap-2">
+                      {/* Search Button (Triggers Panel) */}
+                      <button onClick={() => setShowSearchPanel(true)} className="bg-white/5 border border-white/10 p-2 rounded-full backdrop-blur-md hover:bg-white/20 transition-colors group relative flex items-center">
+                         <Search className="w-5 h-5 text-white" />
+                         <span className="btn-pill-content text-xs font-bold whitespace-nowrap overflow-hidden">Search</span>
+                      </button>
+                      
+                      {/* Club Belong Action Button */}
+                      <button className="bg-white/5 border border-white/10 p-2 rounded-full backdrop-blur-md hover:bg-white/20 transition-colors group relative flex items-center">
+                         <Share className="w-5 h-5 text-white" />
+                         <span className="btn-pill-content text-xs font-bold whitespace-nowrap overflow-hidden">Club Belong</span>
+                      </button>
+
+                      {/* Me Profile Trigger */}
+                      <button onClick={() => setShowMeProfile(true)} className="p-1 rounded-full backdrop-blur-md transition-all group relative flex items-center bg-black/20 hover:bg-white/20 border border-white/10">
+                         <div className="w-8 h-8 rounded-full overflow-hidden border border-white/50">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=transparent" className="w-full h-full bg-gray-600 object-cover group-hover:grayscale-0 transition-all" />
+                         </div>
+                         <span className="btn-pill-content text-xs font-bold whitespace-nowrap overflow-hidden text-white ml-1">
+                            Felix
+                         </span>
+                      </button>
+                  </div>
+                </div>
+              )}
+
+              {/* History View Overlay */}
+              {isHistoryView && activeTab === 'streams' && renderHistoryGrid(STREAMS_DATA, 'stream')}
+              {isHistoryView && activeTab === 'plays' && renderHistoryGrid(PLAYS_DATA, 'play')}
+
+              <div 
+                className="flex-1 overflow-y-scroll scrollbar-hide relative"
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
+                onTouchStart={handleFeedTouchStart}
+                onTouchMove={handleFeedTouchMove}
+              >
+                {activeTab === 'streams' && (
+                    <div className="w-full flex flex-col pb-20">
+                      {STREAMS_DATA.map(stream => (
+                        <StreamView key={stream.id} stream={stream} isActive={true} opacityClass={globalOpacityClass} />
+                      ))}
+                    </div>
+                )}
+                {activeTab === 'plays' && (
+                    <div className="w-full flex flex-col pb-20">
+                      {PLAYS_DATA.map(play => (
+                        <PlayView key={play.id} play={play} isActive={true} opacityClass={globalOpacityClass} />
+                      ))}
+                    </div>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<OmniView />);
+    </script>
+</body>
+</html>
