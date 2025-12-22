@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OmniView</title>
+    <title>Club Belong</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -1121,14 +1121,14 @@
             );
         };
 
-        const OmniView = () => {
+        const cbView = () => {
           const [activeTab, setActiveTab] = useState('streams');
           const [showSearchPanel, setShowSearchPanel] = useState(false);
           const [showMeProfile, setShowMeProfile] = useState(false);
           const [cityName, setCityName] = useState('Edmonton');
           const [isHistoryView, setIsHistoryView] = useState(false);
           
-          // Premium Logic Moved to OmniView
+          // Premium Logic Moved to cbView
           const [minutesWatched, setMinutesWatched] = useState(325); 
           const dailyGoal = 360; 
           const isFreePremiumUnlocked = minutesWatched >= dailyGoal;
@@ -1394,7 +1394,7 @@
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<OmniView />);
+        root.render(<cbView />);
     </script>
 </body>
 </html>
