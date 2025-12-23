@@ -1121,14 +1121,14 @@
             );
         };
 
-        const cbView = () => {
+        const OmniView = () => {
           const [activeTab, setActiveTab] = useState('streams');
           const [showSearchPanel, setShowSearchPanel] = useState(false);
           const [showMeProfile, setShowMeProfile] = useState(false);
           const [cityName, setCityName] = useState('Edmonton');
           const [isHistoryView, setIsHistoryView] = useState(false);
           
-          // Premium Logic Moved to cbView
+          // Premium Logic Moved to OmniView
           const [minutesWatched, setMinutesWatched] = useState(325); 
           const dailyGoal = 360; 
           const isFreePremiumUnlocked = minutesWatched >= dailyGoal;
@@ -1394,7 +1394,7 @@
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<cbView />);
+        root.render(<OmniView />);
     </script>
 </body>
 </html>
